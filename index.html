@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Random Workout z Popupem, Rundami i Dźwiękiem</title>
+  <style>
+    html, body { margin:0; padding:0; height:100%; }
+    body {
+      display:flex;
+      background:url('background.jpg') no-repeat center center fixed;
+      background-size:cover;
+      font-family:sans-serif;
+      color:#fff;
+    }
+    .main { display:flex; width:100%; padding:20px; box-sizing:border-box; }
+    .left { flex:1; display:flex; flex-direction:column; align-items:flex-start; }
+    .right { width:350px; margin-left:40px; }
+    button {
+      background:rgba(255,255,255,0.9);
+      color:#000; border:none; border-radius:4px;
+      padding:10px 20px; font-size:1rem; cursor:pointer;
+      margin-bottom:10px;
+    }
+    .images-section { margin-bottom:30px; }
+    .images-container {
+      display:flex; gap:10px; flex-wrap:wrap;
+    }
+    .images-container img {
+      width:300px;
+      border:2px solid rgba(255,255,255,0.6);
+      border-radius:4px;
+      box-shadow:0 2px 6px rgba(0,0,0,0.5);
+    }
+    #endPopup {
+      position:fixed; top:50%; left:50%;
+      transform:translate(-50%,-50%);
+      background:rgba(200,0,0,0.9); color:#fff;
+      padding:150px 0; font-size:8rem; font-weight:bold;
+      border-radius:6px; display:none;
+      align-items:center; justify-content:center;
+      text-align:center; z-index:1000; cursor:pointer;
+    }
+    .timer-section {
+      background:rgba(0,0,0,0.5); padding:20px; border-radius:8px;
+    }
+    .round-widget {
+      display:flex; justify-content:center; align-items:center;
+      gap:10px; margin-bottom:10px;
+    }
+    .round-widget span {
+      display:inline-block; width:2ch; text-align:center;
+      font-size:1.2rem;
+    }
+    .cycle-indicator {
+      text-align:center; margin-bottom:10px;
+      font-size:1.2rem;
+    }
+    .timer-display {
+      font-size:3rem; text-align:center; margin-bottom:20px;
+    }
+    .timer-controls {
+      display:flex; gap:10px; flex-wrap:wrap;
+      justify-content:center; margin-bottom:10px;
+    }
+    .timer-controls button { flex:1; padding:8px; font-size:0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="main">
+    <div class="left">
+      <div class="images-section">
+        <button id="btnImages">Losuj 4 ćwiczeń rozciągających</button>
+        <div class="images-container" id="imagesContainer1"></div>
+      </div>
+      <div class="images-section">
+        <button id="btnExercises">Losuj 4 ćwiczeń siłowych</button>
+        <div class="images-container" id="imagesContainer2"></div>
+      </div>
+    </div>
+    <div class="right">
+      <div class="timer-section">
+
+        <!-- wybór liczby rund -->
+        <div class="round-widget">
+          <button id="roundMinus">−</button>
+          <span id="roundsCount">4</span>
+          <button id="roundPlus">+</button>
+        </div>
+
+        <!-- wskaźnik cyklu -->
+        <div class="cycle-indicator" id="cycleIndicator">
+          Cykl: 0 / 4
+        </div>
+
+        <div class="timer-display" id="timerDisplay">00:00</div>
+
+        <div class="timer-controls">
+          <button id="workBtn">Praca 45 s</button>
+          <button id="restBtn">Przerwa 15 s</button>
+        </div>
+        <div class="timer-controls">
+          <button id="startBtn">Start</button>
+          <button id="stopBtn">Stop</button>
+          <button id="resetBtn">Reset</button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div id="endPopup">Koniec rundy</div>
+  <audio id="roundEndSound" src="roundend.mp3" preload="auto"></audio>
+
+  <script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // pickRandom
+    function pickRandom(arr, n) {
+      const c = arr.slice();
+      for (let i = c.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [c[i], c[j]] = [c[j], c[i]];
+      }
+      return c.slice(0, n);
+    }
+
+    // Ścieżki
+    const imgPaths = Array.from({length:33},(_,i)=>`images/img${i+1}.png`);
+    const exPaths  = Array.from({length:30},(_,i)=>`exercises/img${i+1}.png`);
+
+    // Elementy
+    const btnImages    = document.getElementById('btnImages');
+    const btnExercises = document.getElementById('btnExercises');
+    const c1           = document.getElementById('imagesContainer1');
+    const c2           = document.getElementById('imagesContainer2');
+
+    function render(c, arr) {
+      c.innerHTML = '';
+      arr.forEach(src => {
+        const img = document.createElement('img');
+        img.src = src;
+        c.appendChild(img);
+      });
+    }
+
+    // Rounds widget
+    const roundMinus   = document.getElementById('roundMinus');
+    const roundPlus    = document.getElementById('roundPlus');
+    const roundsCountS = document.getElementById('roundsCount');
+    const cycleInd     = document.getElementById('cycleIndicator');
+    let roundsCount    = 4;
+
+    function updateRoundsWidget() {
+      roundsCountS.textContent = roundsCount;
+      roundMinus.disabled = roundsCount <= 1;
+      roundPlus.disabled  = roundsCount >= 9;
+      btnImages.textContent    = `Losuj ${roundsCount} ćwiczeń rozciągających`;
+      btnExercises.textContent = `Losuj ${roundsCount} ćwiczeń siłowych`;
+      cycleInd.textContent = `Cykl: 0 / ${roundsCount}`;
+    }
+
+    roundMinus.onclick = () => { if (roundsCount>1) roundsCount--; updateRoundsWidget(); };
+    roundPlus.onclick  = () => { if (roundsCount<9) roundsCount++; updateRoundsWidget(); };
+    updateRoundsWidget();
+
+    btnImages.addEventListener('click', ()=> render(c1, pickRandom(imgPaths, roundsCount)));
+    btnExercises.addEventListener('click', ()=> render(c2, pickRandom(exPaths, roundsCount)));
+
+    // Timer + Popup
+    const timerDisplay  = document.getElementById('timerDisplay');
+    const workBtn       = document.getElementById('workBtn');
+    const restBtn       = document.getElementById('restBtn');
+    const startBtn      = document.getElementById('startBtn');
+    const stopBtn       = document.getElementById('stopBtn');
+    const resetBtn      = document.getElementById('resetBtn');
+    const popup         = document.getElementById('endPopup');
+    const sound         = document.getElementById('roundEndSound');
+
+    const durations = { work:45, rest:15 };
+    let   currentMode  = 'work';
+    let   timeLeft     = durations[currentMode];
+    let   segmentIndex = 0;    // 0…roundsCount*2-1
+    let   timerId      = null;
+    let   running      = false;
+
+    function updateDisplay() {
+      const m = Math.floor(timeLeft/60),
+            s = timeLeft % 60;
+      timerDisplay.textContent =
+        `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+    function setMode(mode) {
+      currentMode = mode;
+      timeLeft     = durations[mode];
+      updateDisplay();
+    }
+    function updateModeButtons(){
+      workBtn.disabled = running;
+      restBtn.disabled = running;
+    }
+    function updateCycleIndicator(){
+      const cyc = running
+        ? Math.floor(segmentIndex/2)+1
+        : 0;
+      cycleInd.textContent = `Cykl: ${cyc} / ${roundsCount}`;
+    }
+
+    function showPopup(){
+      popup.textContent = currentMode==='work'
+        ? 'Koniec pracy'
+        : 'Koniec przerwy';
+      popup.style.display = 'flex';
+      sound.currentTime = 0;
+      sound.play();
+      setTimeout(()=>{
+        popup.style.display = 'none';
+        finishSegment();
+      },2000);
+    }
+
+    function finishSegment(){
+      segmentIndex++;
+      const totalSeg = roundsCount * 2;
+      if (segmentIndex < totalSeg) {
+        startSegment();
+      } else {
+        // koniec wszystkich
+        running = false;
+        updateModeButtons();
+        segmentIndex = 0;
+        updateCycleIndicator();
+        setMode('work');
+      }
+    }
+
+    function startSegment(){
+      const mode = (segmentIndex % 2 === 0) ? 'work' : 'rest';
+      setMode(mode);
+      updateCycleIndicator();
+      clearInterval(timerId);
+      timerId = setInterval(()=>{
+        if (timeLeft > 0) {
+          timeLeft--;
+          updateDisplay();
+        } else {
+          clearInterval(timerId);
+          showPopup();
+        }
+      },1000);
+    }
+
+    function startTimer(){
+      if (running) return;
+      running = true;
+      updateModeButtons();
+      segmentIndex = 0;
+      startSegment();
+    }
+    function stopTimer(){
+      clearInterval(timerId);
+      timerId = null;
+      running = false;
+      updateModeButtons();
+      updateCycleIndicator();
+    }
+    function resetTimer(){
+      stopTimer();
+      segmentIndex = 0;
+      updateCycleIndicator();
+      setMode('work');
+    }
+
+    workBtn   .onclick = ()=>{ if(!running) setMode('work'); };
+    restBtn   .onclick = ()=>{ if(!running) setMode('rest'); };
+    startBtn  .onclick = startTimer;
+    stopBtn   .onclick = stopTimer;
+    resetBtn  .onclick = resetTimer;
+
+    // init
+    setMode('work');
+  });
+  </script>
+</body>
+</html>
